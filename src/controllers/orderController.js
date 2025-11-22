@@ -1,0 +1,323 @@
+import Order from '../models/Order.js';
+import Product from '../models/Product.js';
+import mongoose from 'mongoose';
+import { ApiError } from '../utils/ApiError.js';
+import { ApiResponse } from '../utils/ApiResponse.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { createRazorpayOrder } from '../services/razorpayService.js';
+import PDFDocument from 'pdfkit';
+
+export const createOrder = asyncHandler(async (req, res) => {
+  const { customerId, items, totalAmount, shippingAddress, paymentInfo } = req.body;
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    for (const item of items) {
+      const product = await Product.findById(item.productId).session(session);
+
+      if (!product) {
+        throw new ApiError(404, `Product not found: ${item.productId}`);
+      }
+
+      if (product.stock < item.quantity) {
+        throw new ApiError(400, `Insufficient stock for product: ${product.productName}`);
+      }
+
+      product.stock -= item.quantity;
+      await product.save({ session });
+    }
+
+    const order = await Order.create(
+      [
+        {
+          customerId,
+          items,
+          totalAmount,
+          shippingAddress,
+          paymentInfo,
+        },
+      ],
+      { session }
+    );
+
+    await session.commitTransaction();
+
+    res.status(201).json(new ApiResponse(201, 'Order created successfully', order[0]));
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+});
+
+export const createOrderByCustomer = asyncHandler(async (req, res) => {
+  const { items, totalAmount, shippingAddress } = req.body;
+  const customerId = req.user._id;
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    for (const item of items) {
+      const product = await Product.findById(item.productId).session(session);
+
+      if (!product) {
+        throw new ApiError(404, `Product not found: ${item.productId}`);
+      }
+
+      if (product.stock < item.quantity) {
+        throw new ApiError(400, `Insufficient stock for product: ${product.productName}`);
+      }
+
+      product.stock -= item.quantity;
+      await product.save({ session });
+    }
+
+    const razorpayOrder = await createRazorpayOrder(totalAmount, 'INR', `order_${Date.now()}`);
+
+    const order = await Order.create(
+      [
+        {
+          customerId,
+          items,
+          totalAmount,
+          shippingAddress,
+          paymentInfo: {
+            razorpayOrderId: razorpayOrder.id,
+            status: 'pending',
+          },
+        },
+      ],
+      { session }
+    );
+
+    await session.commitTransaction();
+
+    res.status(201).json(
+      new ApiResponse(201, 'Order created successfully', {
+        order: order[0],
+        razorpayOrder,
+      })
+    );
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+});
+
+export const getAllOrders = asyncHandler(async (req, res) => {
+  const { status, page = 1, limit = 20 } = req.query;
+
+  const filter = {};
+  if (status) {
+    filter.status = status;
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+
+  const orders = await Order.find(filter)
+    .populate('customerId', 'firstName lastName email phone')
+    .populate('items.productId', 'productName')
+    .limit(Number(limit))
+    .skip(skip)
+    .sort({ createdAt: -1 });
+
+  const total = await Order.countDocuments(filter);
+
+  res.json(
+    new ApiResponse(200, 'Orders retrieved successfully', {
+      orders,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit)),
+      },
+    })
+  );
+});
+
+export const getOrderById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const order = await Order.findById(id)
+    .populate('customerId', 'firstName lastName email phone')
+    .populate('items.productId', 'productName productImages');
+
+  if (!order) {
+    throw new ApiError(404, 'Order not found');
+  }
+
+  if (req.user.role === 'customer' && order.customerId._id.toString() !== req.user._id.toString()) {
+    throw new ApiError(403, 'Access denied');
+  }
+
+  res.json(new ApiResponse(200, 'Order retrieved successfully', order));
+});
+
+export const updateOrder = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const updates = req.body;
+
+  const order = await Order.findById(id);
+  if (!order) {
+    throw new ApiError(404, 'Order not found');
+  }
+
+  const allowedUpdates = ['status', 'shippingAddress'];
+  Object.keys(updates).forEach((key) => {
+    if (allowedUpdates.includes(key)) {
+      order[key] = updates[key];
+    }
+  });
+
+  await order.save();
+
+  res.json(new ApiResponse(200, 'Order updated successfully', order));
+});
+
+export const deleteOrder = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const order = await Order.findByIdAndDelete(id);
+  if (!order) {
+    throw new ApiError(404, 'Order not found');
+  }
+
+  res.json(new ApiResponse(200, 'Order deleted successfully'));
+});
+
+export const changeOrderStatus = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled', 'refunded'];
+  if (!validStatuses.includes(status)) {
+    throw new ApiError(400, 'Invalid status');
+  }
+
+  const order = await Order.findById(id);
+  if (!order) {
+    throw new ApiError(404, 'Order not found');
+  }
+
+  order.status = status;
+  await order.save();
+
+  res.json(new ApiResponse(200, 'Order status updated successfully', order));
+});
+
+export const generateInvoice = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const order = await Order.findById(id)
+    .populate('customerId', 'firstName lastName email phone')
+    .populate('items.productId', 'productName');
+
+  if (!order) {
+    throw new ApiError(404, 'Order not found');
+  }
+
+  if (req.user.role === 'customer' && order.customerId._id.toString() !== req.user._id.toString()) {
+    throw new ApiError(403, 'Access denied');
+  }
+
+  const doc = new PDFDocument();
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename=invoice-${order._id}.pdf`);
+
+  doc.pipe(res);
+
+  doc.fontSize(20).text('INVOICE', { align: 'center' });
+  doc.moveDown();
+
+  doc.fontSize(12).text(`Order ID: ${order._id}`);
+  doc.text(`Date: ${new Date(order.createdAt).toLocaleDateString()}`);
+  doc.text(`Status: ${order.status}`);
+  doc.moveDown();
+
+  doc.fontSize(14).text('Customer Details:');
+  doc.fontSize(10).text(`Name: ${order.customerId.firstName} ${order.customerId.lastName}`);
+  doc.text(`Email: ${order.customerId.email}`);
+  doc.text(`Phone: ${order.customerId.phone}`);
+  doc.moveDown();
+
+  doc.fontSize(14).text('Shipping Address:');
+  doc.fontSize(10).text(order.shippingAddress.address);
+  doc.text(`${order.shippingAddress.city}, ${order.shippingAddress.state} ${order.shippingAddress.pincode}`);
+  doc.text(order.shippingAddress.country);
+  doc.moveDown();
+
+  doc.fontSize(14).text('Items:');
+  doc.moveDown(0.5);
+
+  order.items.forEach((item, index) => {
+    doc.fontSize(10).text(
+      `${index + 1}. ${item.name} - Qty: ${item.quantity} x Rs.${item.price} = Rs.${item.subtotal}`
+    );
+  });
+
+  doc.moveDown();
+  doc.fontSize(14).text(`Total Amount: Rs.${order.totalAmount}`, { align: 'right' });
+
+  doc.end();
+});
+
+export const getOrderSummary = asyncHandler(async (req, res) => {
+  const totalOrders = await Order.countDocuments();
+  const totalRevenue = await Order.aggregate([
+    { $match: { status: { $nin: ['cancelled', 'refunded'] } } },
+    { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+  ]);
+
+  const ordersByStatus = await Order.aggregate([
+    { $group: { _id: '$status', count: { $sum: 1 } } },
+  ]);
+
+  const summary = {
+    totalOrders,
+    totalRevenue: totalRevenue[0]?.total || 0,
+    ordersByStatus: ordersByStatus.reduce((acc, item) => {
+      acc[item._id] = item.count;
+      return acc;
+    }, {}),
+  };
+
+  res.json(new ApiResponse(200, 'Order summary retrieved successfully', summary));
+});
+
+export const getAllCustomerOrdersSummary = asyncHandler(async (req, res) => {
+  const customerId = req.user._id;
+
+  const orders = await Order.find({ customerId })
+    .populate('items.productId', 'productName productImages')
+    .sort({ createdAt: -1 });
+
+  const totalSpent = orders
+    .filter((order) => !['cancelled', 'refunded'].includes(order.status))
+    .reduce((sum, order) => sum + order.totalAmount, 0);
+
+  const summary = {
+    totalOrders: orders.length,
+    totalSpent,
+    orders,
+  };
+
+  res.json(new ApiResponse(200, 'Customer orders summary retrieved successfully', summary));
+});
+
+export const getOrdersByCustomerId = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const orders = await Order.find({ customerId: id })
+    .populate('items.productId', 'productName productImages')
+    .sort({ createdAt: -1 });
+
+  res.json(new ApiResponse(200, 'Customer orders retrieved successfully', orders));
+});
