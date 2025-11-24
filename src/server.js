@@ -23,7 +23,29 @@ const app = express();
 connectDatabase();
 
 app.use(helmet());
-app.use(cors());
+// CORS Allowed Origins
+const allowedOrigins = [
+  "https://crockery-e-com-dashboard.netlify.app",
+  "https://tanariri-frontend.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS: " + origin));
+      }
+    },
+    credentials: true,
+  })
+);
+
 app.use(morgan("combined"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
