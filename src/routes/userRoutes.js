@@ -79,7 +79,7 @@ router.get("/:id", authenticate, authorize("admin", "userpannel"), getUserById);
 router.put(
   "/:id",
   authenticate,
-  authorize("admin", "userpannel"),
+  authorize("customer", "admin", "userpannel"),
   validate(updateUserSchema),
   updateUser
 );
