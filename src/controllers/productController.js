@@ -4,9 +4,18 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 export const createProduct = asyncHandler(async (req, res) => {
-  const product = await Product.create(req.body);
+  let imagePaths = [];
+  if (req.files && req.files.length) {
+    imagePaths = req.files.map((file) => file.path.replace(/\\/g, "/"));
+  }
+  const product = await Product.create({
+    ...req.body,
+    productImages: imagePaths,
+  });
 
-  res.status(201).json(new ApiResponse(201, 'Product created successfully', product));
+  res
+    .status(201)
+    .json(new ApiResponse(201, "Product created successfully", product));
 });
 
 export const getAllProducts = asyncHandler(async (req, res) => {
@@ -85,19 +94,18 @@ export const getProductById = asyncHandler(async (req, res) => {
 
 export const updateProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
-
   const product = await Product.findById(id);
-  if (!product) {
-    throw new ApiError(404, 'Product not found');
+  if (!product) throw new ApiError(404, "Product not found");
+  if (req.files && req.files.length) {
+    product.productImages = req.files.map((file) =>
+      file.path.replace(/\\/g, "/")
+    );
   }
-
   Object.keys(req.body).forEach((key) => {
     product[key] = req.body[key];
   });
-
   await product.save();
-
-  res.json(new ApiResponse(200, 'Product updated successfully', product));
+  res.json(new ApiResponse(200, "Product updated successfully", product));
 });
 
 export const deleteProduct = asyncHandler(async (req, res) => {

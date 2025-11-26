@@ -16,6 +16,7 @@ import { authenticate } from "../middlewares/authenticate.js";
 import { authorize } from "../middlewares/authorize.js";
 import { validate } from "../middlewares/validate.js";
 import { productSchema } from "../utils/validationSchemas.js";
+import { upload } from "../middlewares/multer.js";
 
 const router = express.Router();
 
@@ -57,6 +58,7 @@ const router = express.Router();
 // create product
 router.post(
   "/createproduct",
+  upload.array('productImages', 5),
   authenticate,
   authorize("admin", "userpannel"),
   validate(productSchema),
@@ -73,6 +75,7 @@ router.get("/getproductbyid/:id", getProductById);
 // update
 router.put(
   "/updateproduct/:id",
+  upload.array('productImages', 5),
   authenticate,
   authorize("admin", "userpannel"),
   updateProduct
