@@ -1,4 +1,4 @@
-import Joi from 'joi';
+import Joi from "joi";
 
 export const signupSchema = Joi.object({
   firstName: Joi.string().required().trim(),
@@ -41,9 +41,9 @@ export const createUserSchema = Joi.object({
   lastName: Joi.string().required().trim(),
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
-  role: Joi.string().valid('customer', 'admin', 'userpannel'),
-  phone: Joi.string().when('role', {
-    is: 'customer',
+  role: Joi.string().valid("customer", "admin", "userpannel"),
+  phone: Joi.string().when("role", {
+    is: "customer",
     then: Joi.required(),
     otherwise: Joi.optional(),
   }),
@@ -84,7 +84,7 @@ export const categorySchema = Joi.object({
     .items(
       Joi.object({
         name: Joi.string().required(),
-        label: Joi.string().required(),
+        label: Joi.string().optional(),
       })
     )
     .min(1)

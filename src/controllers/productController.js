@@ -84,12 +84,27 @@ export const getBestSellerProducts = asyncHandler(async (req, res) => {
 export const getProductById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const product = await Product.findById(id).populate('category', 'name subCategories');
-  if (!product) {
-    throw new ApiError(404, 'Product not found');
-  }
+  const product = await Product.findById(id).populate(
+    "category",
+    "name subCategories"
+  );
 
-  res.json(new ApiResponse(200, 'Product retrieved successfully', product));
+  if (!product) throw new ApiError(404, "Product not found");
+
+  // category ke andar se subcategory find karo
+  const subCategory = product.category.subCategories.find(
+    (sub) => sub._id.toString() === product.subCategoryId.toString()
+  );
+
+  // response me subCategoryId ko object bana do
+  const response = {
+    ...product.toObject(),
+    subCategoryId: subCategory
+      ? { _id: subCategory._id, name: subCategory.name }
+      : null,
+  };
+
+  res.json(new ApiResponse(200, "Product retrieved successfully", response));
 });
 
 export const updateProduct = asyncHandler(async (req, res) => {

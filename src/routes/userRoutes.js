@@ -85,6 +85,11 @@ router.patch(
   authorize("admin", "userpannel"),
   activateUser
 );
-router.delete("/:id", authenticate, authorize("admin"), deleteUser);
+router.delete(
+  "/:id",
+  authenticate,
+  authorize("userpannel", "admin"),
+  deleteUser
+);
 
 export default router;
