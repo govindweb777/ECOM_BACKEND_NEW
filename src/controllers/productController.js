@@ -8,10 +8,39 @@ export const createProduct = asyncHandler(async (req, res) => {
   if (req.files && req.files.length) {
     imagePaths = req.files.map((file) => file.path.replace(/\\/g, "/"));
   }
-  const product = await Product.create({
-    ...req.body,
-    productImages: imagePaths,
+
+  const allowedFields = [
+    "productName",
+    "description",
+    "originalPrice",
+    "discountPrice",
+    "priceINR",
+    "discountPriceINR",
+    "priceUSD",
+    "discountPriceUSD",
+    "stock",
+    "category",
+    "subCategoryId",
+    "isActive",
+    "bestSeller",
+    "hideProduct",
+  ];
+
+  const productData = {};
+  allowedFields.forEach((field) => {
+    if (req.body[field] !== undefined) {
+      productData[field] = req.body[field];
+    }
   });
+
+  productData.priceINR = productData.priceINR || 0;
+  productData.discountPriceINR = productData.discountPriceINR || 0;
+  productData.priceUSD = productData.priceUSD || 0;
+  productData.discountPriceUSD = productData.discountPriceUSD || 0;
+
+  productData.productImages = imagePaths;
+
+  const product = await Product.create(productData);
 
   res
     .status(201)

@@ -1,14 +1,15 @@
-import Order from '../models/Order.js';
-import Product from '../models/Product.js';
-import mongoose from 'mongoose';
-import { ApiError } from '../utils/ApiError.js';
-import { ApiResponse } from '../utils/ApiResponse.js';
-import { asyncHandler } from '../utils/asyncHandler.js';
-import { createRazorpayOrder } from '../services/razorpayService.js';
-import PDFDocument from 'pdfkit';
+import Order from "../models/Order.js";
+import Product from "../models/Product.js";
+import mongoose from "mongoose";
+import { ApiError } from "../utils/ApiError.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { createRazorpayOrder } from "../services/razorpayService.js";
+import PDFDocument from "pdfkit";
 
 export const createOrder = asyncHandler(async (req, res) => {
-  const { customerId, items, totalAmount, shippingAddress, paymentInfo } = req.body;
+  const { customerId, items, totalAmount, shippingAddress, paymentInfo } =
+    req.body;
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -22,7 +23,10 @@ export const createOrder = asyncHandler(async (req, res) => {
       }
 
       if (product.stock < item.quantity) {
-        throw new ApiError(400, `Insufficient stock for product: ${product.productName}`);
+        throw new ApiError(
+          400,
+          `Insufficient stock for product: ${product.productName}`
+        );
       }
 
       product.stock -= item.quantity;
@@ -44,7 +48,9 @@ export const createOrder = asyncHandler(async (req, res) => {
 
     await session.commitTransaction();
 
-    res.status(201).json(new ApiResponse(201, 'Order created successfully', order[0]));
+    res
+      .status(201)
+      .json(new ApiResponse(201, "Order created successfully", order[0]));
   } catch (error) {
     await session.abortTransaction();
     throw error;
@@ -69,14 +75,21 @@ export const createOrderByCustomer = asyncHandler(async (req, res) => {
       }
 
       if (product.stock < item.quantity) {
-        throw new ApiError(400, `Insufficient stock for product: ${product.productName}`);
+        throw new ApiError(
+          400,
+          `Insufficient stock for product: ${product.productName}`
+        );
       }
 
       product.stock -= item.quantity;
       await product.save({ session });
     }
 
-    const razorpayOrder = await createRazorpayOrder(totalAmount, 'INR', `order_${Date.now()}`);
+    const razorpayOrder = await createRazorpayOrder(
+      totalAmount,
+      "INR",
+      `order_${Date.now()}`
+    );
 
     const order = await Order.create(
       [
@@ -87,7 +100,7 @@ export const createOrderByCustomer = asyncHandler(async (req, res) => {
           shippingAddress,
           paymentInfo: {
             razorpayOrderId: razorpayOrder.id,
-            status: 'pending',
+            status: "pending",
           },
         },
       ],
@@ -97,7 +110,7 @@ export const createOrderByCustomer = asyncHandler(async (req, res) => {
     await session.commitTransaction();
 
     res.status(201).json(
-      new ApiResponse(201, 'Order created successfully', {
+      new ApiResponse(201, "Order created successfully", {
         order: order[0],
         razorpayOrder,
       })
@@ -121,8 +134,8 @@ export const getAllOrders = asyncHandler(async (req, res) => {
   const skip = (Number(page) - 1) * Number(limit);
 
   const orders = await Order.find(filter)
-    .populate('customerId', 'firstName lastName email phone')
-    .populate('items.productId', 'productName')
+    .populate("customerId", "firstName lastName email phone")
+    .populate("items.productId", "productName")
     .limit(Number(limit))
     .skip(skip)
     .sort({ createdAt: -1 });
@@ -130,7 +143,7 @@ export const getAllOrders = asyncHandler(async (req, res) => {
   const total = await Order.countDocuments(filter);
 
   res.json(
-    new ApiResponse(200, 'Orders retrieved successfully', {
+    new ApiResponse(200, "Orders retrieved successfully", {
       orders,
       pagination: {
         page: Number(page),
@@ -146,18 +159,21 @@ export const getOrderById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const order = await Order.findById(id)
-    .populate('customerId', 'firstName lastName email phone')
-    .populate('items.productId', 'productName productImages');
+    .populate("customerId", "firstName lastName email phone")
+    .populate("items.productId", "productName productImages");
 
   if (!order) {
-    throw new ApiError(404, 'Order not found');
+    throw new ApiError(404, "Order not found");
   }
 
-  if (req.user.role === 'customer' && order.customerId._id.toString() !== req.user._id.toString()) {
-    throw new ApiError(403, 'Access denied');
+  if (
+    req.user.role === "customer" &&
+    order.customerId._id.toString() !== req.user._id.toString()
+  ) {
+    throw new ApiError(403, "Access denied");
   }
 
-  res.json(new ApiResponse(200, 'Order retrieved successfully', order));
+  res.json(new ApiResponse(200, "Order retrieved successfully", order));
 });
 
 export const updateOrder = asyncHandler(async (req, res) => {
@@ -166,10 +182,10 @@ export const updateOrder = asyncHandler(async (req, res) => {
 
   const order = await Order.findById(id);
   if (!order) {
-    throw new ApiError(404, 'Order not found');
+    throw new ApiError(404, "Order not found");
   }
 
-  const allowedUpdates = ['status', 'shippingAddress'];
+  const allowedUpdates = ["status", "shippingAddress"];
   Object.keys(updates).forEach((key) => {
     if (allowedUpdates.includes(key)) {
       order[key] = updates[key];
@@ -178,7 +194,7 @@ export const updateOrder = asyncHandler(async (req, res) => {
 
   await order.save();
 
-  res.json(new ApiResponse(200, 'Order updated successfully', order));
+  res.json(new ApiResponse(200, "Order updated successfully", order));
 });
 
 export const deleteOrder = asyncHandler(async (req, res) => {
@@ -186,55 +202,68 @@ export const deleteOrder = asyncHandler(async (req, res) => {
 
   const order = await Order.findByIdAndDelete(id);
   if (!order) {
-    throw new ApiError(404, 'Order not found');
+    throw new ApiError(404, "Order not found");
   }
 
-  res.json(new ApiResponse(200, 'Order deleted successfully'));
+  res.json(new ApiResponse(200, "Order deleted successfully"));
 });
 
 export const changeOrderStatus = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled', 'refunded'];
+  const validStatuses = [
+    "pending",
+    "confirmed",
+    "shipped",
+    "delivered",
+    "cancelled",
+    "refunded",
+  ];
   if (!validStatuses.includes(status)) {
-    throw new ApiError(400, 'Invalid status');
+    throw new ApiError(400, "Invalid status");
   }
 
   const order = await Order.findById(id);
   if (!order) {
-    throw new ApiError(404, 'Order not found');
+    throw new ApiError(404, "Order not found");
   }
 
   order.status = status;
   await order.save();
 
-  res.json(new ApiResponse(200, 'Order status updated successfully', order));
+  res.json(new ApiResponse(200, "Order status updated successfully", order));
 });
 
 export const generateInvoice = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const order = await Order.findById(id)
-    .populate('customerId', 'firstName lastName email phone')
-    .populate('items.productId', 'productName');
+    .populate("customerId", "firstName lastName email phone")
+    .populate("items.productId", "productName");
 
   if (!order) {
-    throw new ApiError(404, 'Order not found');
+    throw new ApiError(404, "Order not found");
   }
 
-  if (req.user.role === 'customer' && order.customerId._id.toString() !== req.user._id.toString()) {
-    throw new ApiError(403, 'Access denied');
+  if (
+    req.user.role === "customer" &&
+    order.customerId._id.toString() !== req.user._id.toString()
+  ) {
+    throw new ApiError(403, "Access denied");
   }
 
   const doc = new PDFDocument();
 
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename=invoice-${order._id}.pdf`);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename=invoice-${order._id}.pdf`
+  );
 
   doc.pipe(res);
 
-  doc.fontSize(20).text('INVOICE', { align: 'center' });
+  doc.fontSize(20).text("INVOICE", { align: "center" });
   doc.moveDown();
 
   doc.fontSize(12).text(`Order ID: ${order._id}`);
@@ -242,29 +271,39 @@ export const generateInvoice = asyncHandler(async (req, res) => {
   doc.text(`Status: ${order.status}`);
   doc.moveDown();
 
-  doc.fontSize(14).text('Customer Details:');
-  doc.fontSize(10).text(`Name: ${order.customerId.firstName} ${order.customerId.lastName}`);
+  doc.fontSize(14).text("Customer Details:");
+  doc
+    .fontSize(10)
+    .text(`Name: ${order.customerId.firstName} ${order.customerId.lastName}`);
   doc.text(`Email: ${order.customerId.email}`);
   doc.text(`Phone: ${order.customerId.phone}`);
   doc.moveDown();
 
-  doc.fontSize(14).text('Shipping Address:');
+  doc.fontSize(14).text("Shipping Address:");
   doc.fontSize(10).text(order.shippingAddress.address);
-  doc.text(`${order.shippingAddress.city}, ${order.shippingAddress.state} ${order.shippingAddress.pincode}`);
+  doc.text(
+    `${order.shippingAddress.city}, ${order.shippingAddress.state} ${order.shippingAddress.pincode}`
+  );
   doc.text(order.shippingAddress.country);
   doc.moveDown();
 
-  doc.fontSize(14).text('Items:');
+  doc.fontSize(14).text("Items:");
   doc.moveDown(0.5);
 
   order.items.forEach((item, index) => {
-    doc.fontSize(10).text(
-      `${index + 1}. ${item.name} - Qty: ${item.quantity} x Rs.${item.price} = Rs.${item.subtotal}`
-    );
+    doc
+      .fontSize(10)
+      .text(
+        `${index + 1}. ${item.name} - Qty: ${item.quantity} x Rs.${
+          item.price
+        } = Rs.${item.subtotal}`
+      );
   });
 
   doc.moveDown();
-  doc.fontSize(14).text(`Total Amount: Rs.${order.totalAmount}`, { align: 'right' });
+  doc
+    .fontSize(14)
+    .text(`Total Amount: Rs.${order.totalAmount}`, { align: "right" });
 
   doc.end();
 });
@@ -272,12 +311,12 @@ export const generateInvoice = asyncHandler(async (req, res) => {
 export const getOrderSummary = asyncHandler(async (req, res) => {
   const totalOrders = await Order.countDocuments();
   const totalRevenue = await Order.aggregate([
-    { $match: { status: { $nin: ['cancelled', 'refunded'] } } },
-    { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+    { $match: { status: { $nin: ["cancelled", "refunded"] } } },
+    { $group: { _id: null, total: { $sum: "$totalAmount" } } },
   ]);
 
   const ordersByStatus = await Order.aggregate([
-    { $group: { _id: '$status', count: { $sum: 1 } } },
+    { $group: { _id: "$status", count: { $sum: 1 } } },
   ]);
 
   const summary = {
@@ -289,18 +328,20 @@ export const getOrderSummary = asyncHandler(async (req, res) => {
     }, {}),
   };
 
-  res.json(new ApiResponse(200, 'Order summary retrieved successfully', summary));
+  res.json(
+    new ApiResponse(200, "Order summary retrieved successfully", summary)
+  );
 });
 
 export const getAllCustomerOrdersSummary = asyncHandler(async (req, res) => {
   const customerId = req.user._id;
 
   const orders = await Order.find({ customerId })
-    .populate('items.productId', 'productName productImages')
+    .populate("items.productId", "productName productImages")
     .sort({ createdAt: -1 });
 
   const totalSpent = orders
-    .filter((order) => !['cancelled', 'refunded'].includes(order.status))
+    .filter((order) => !["cancelled", "refunded"].includes(order.status))
     .reduce((sum, order) => sum + order.totalAmount, 0);
 
   const summary = {
@@ -309,15 +350,320 @@ export const getAllCustomerOrdersSummary = asyncHandler(async (req, res) => {
     orders,
   };
 
-  res.json(new ApiResponse(200, 'Customer orders summary retrieved successfully', summary));
+  res.json(
+    new ApiResponse(
+      200,
+      "Customer orders summary retrieved successfully",
+      summary
+    )
+  );
 });
 
 export const getOrdersByCustomerId = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const orders = await Order.find({ customerId: id })
-    .populate('items.productId', 'productName productImages')
+    .populate("items.productId", "productName productImages")
     .sort({ createdAt: -1 });
 
-  res.json(new ApiResponse(200, 'Customer orders retrieved successfully', orders));
+  res.json(
+    new ApiResponse(200, "Customer orders retrieved successfully", orders)
+  );
+});
+
+export const submitReturnRequest = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason, reasonCategory } = req.body;
+  const customerId = req.user._id;
+
+  if (!reason || !reasonCategory) {
+    throw new ApiError(400, "Reason and reason category are required");
+  }
+
+  const validCategories = [
+    "defective",
+    "wrong_item",
+    "not_as_described",
+    "damaged",
+    "size_issue",
+    "quality_issue",
+    "changed_mind",
+    "other",
+  ];
+
+  if (!validCategories.includes(reasonCategory)) {
+    throw new ApiError(400, "Invalid reason category");
+  }
+
+  const order = await Order.findById(id);
+
+  if (!order) {
+    throw new ApiError(404, "Order not found");
+  }
+
+  if (order.customerId.toString() !== customerId.toString()) {
+    throw new ApiError(403, "Access denied");
+  }
+
+  if (order.status !== "delivered") {
+    throw new ApiError(400, "Only delivered orders can be returned");
+  }
+
+  if (!order.isReturnable) {
+    throw new ApiError(400, "This order is not eligible for return");
+  }
+
+  if (order.returnRequest && order.returnRequest.requestStatus === "pending") {
+    throw new ApiError(
+      400,
+      "A return request is already pending for this order"
+    );
+  }
+
+  const deliveryDate = order.updatedAt;
+  const currentDate = new Date();
+  const daysSinceDelivery = Math.floor(
+    (currentDate - deliveryDate) / (1000 * 60 * 60 * 24)
+  );
+
+  if (daysSinceDelivery > order.returnWindowDays) {
+    throw new ApiError(
+      400,
+      `Return window of ${order.returnWindowDays} days has expired`
+    );
+  }
+
+  const imageUrls = req.files
+    ? req.files.map((file) => `/uploads/${file.filename}`)
+    : [];
+
+  order.returnRequest = {
+    requestedBy: customerId,
+    reason: reason.trim(),
+    reasonCategory,
+    images: imageUrls,
+    requestStatus: "pending",
+    requestedAt: new Date(),
+  };
+
+  order.status = "return_requested";
+  await order.save();
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, "Return request submitted successfully", order));
+});
+
+export const approveReturnRequest = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { adminComment, refundAmount } = req.body;
+  const adminId = req.user._id;
+
+  const order = await Order.findById(id)
+    .populate("customerId", "firstName lastName email")
+    .populate("items.productId", "productName");
+
+  if (!order) {
+    throw new ApiError(404, "Order not found");
+  }
+
+  if (!order.returnRequest) {
+    throw new ApiError(400, "No return request found for this order");
+  }
+
+  if (order.returnRequest.requestStatus !== "pending") {
+    throw new ApiError(400, "Return request has already been processed");
+  }
+
+  order.returnRequest.requestStatus = "approved";
+  order.returnRequest.reviewedBy = adminId;
+  order.returnRequest.reviewedAt = new Date();
+  order.returnRequest.adminComment = adminComment?.trim() || "Return approved";
+  order.returnRequest.refundAmount = refundAmount || order.totalAmount;
+  order.returnRequest.refundStatus = "not_initiated";
+
+  order.status = "return_approved";
+  await order.save();
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, "Return request approved successfully", order));
+});
+
+export const rejectReturnRequest = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { adminComment } = req.body;
+  const adminId = req.user._id;
+
+  if (!adminComment) {
+    throw new ApiError(400, "Admin comment is required for rejection");
+  }
+
+  const order = await Order.findById(id)
+    .populate("customerId", "firstName lastName email")
+    .populate("items.productId", "productName");
+
+  if (!order) {
+    throw new ApiError(404, "Order not found");
+  }
+
+  if (!order.returnRequest) {
+    throw new ApiError(400, "No return request found for this order");
+  }
+
+  if (order.returnRequest.requestStatus !== "pending") {
+    throw new ApiError(400, "Return request has already been processed");
+  }
+
+  order.returnRequest.requestStatus = "rejected";
+  order.returnRequest.reviewedBy = adminId;
+  order.returnRequest.reviewedAt = new Date();
+  order.returnRequest.adminComment = adminComment.trim();
+
+  order.status = "return_rejected";
+  await order.save();
+
+  res.status(200).json(new ApiResponse(200, "Return request rejected", order));
+});
+
+export const completeReturnRequest = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const order = await Order.findById(id)
+      .populate("customerId", "firstName lastName email")
+      .populate("items.productId")
+      .session(session);
+
+    if (!order) {
+      throw new ApiError(404, "Order not found");
+    }
+
+    if (!order.returnRequest) {
+      throw new ApiError(400, "No return request found for this order");
+    }
+
+    if (order.returnRequest.requestStatus !== "approved") {
+      throw new ApiError(400, "Only approved return requests can be completed");
+    }
+
+    for (const item of order.items) {
+      const product = await Product.findById(item.productId._id).session(
+        session
+      );
+      if (product) {
+        product.stock += item.quantity;
+        await product.save({ session });
+      }
+    }
+
+    order.returnRequest.requestStatus = "completed";
+    order.returnRequest.refundStatus = "processing";
+    order.status = "return_completed";
+    order.paymentInfo.status = "refunded";
+
+    await order.save({ session });
+
+    await session.commitTransaction();
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          "Return completed and refund initiated successfully",
+          order
+        )
+      );
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+});
+
+export const getAllReturnRequests = asyncHandler(async (req, res) => {
+  const { status, page = 1, limit = 20 } = req.query;
+
+  const filter = { returnRequest: { $exists: true, $ne: null } };
+
+  if (status) {
+    filter["returnRequest.requestStatus"] = status;
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+
+  const orders = await Order.find(filter)
+    .populate("customerId", "firstName lastName email phone")
+    .populate("returnRequest.requestedBy", "firstName lastName email")
+    .populate("returnRequest.reviewedBy", "firstName lastName")
+    .populate("items.productId", "productName productImages")
+    .limit(Number(limit))
+    .skip(skip)
+    .sort({ "returnRequest.requestedAt": -1 });
+
+  const total = await Order.countDocuments(filter);
+
+  res.json(
+    new ApiResponse(200, "Return requests retrieved successfully", {
+      returnRequests: orders,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit)),
+      },
+    })
+  );
+});
+
+export const getMyReturnRequests = asyncHandler(async (req, res) => {
+  const customerId = req.user._id;
+
+  const orders = await Order.find({
+    customerId,
+    returnRequest: { $exists: true, $ne: null },
+  })
+    .populate("items.productId", "productName productImages")
+    .populate("returnRequest.reviewedBy", "firstName lastName")
+    .sort({ "returnRequest.requestedAt": -1 });
+
+  res.json(
+    new ApiResponse(200, "Your return requests retrieved successfully", orders)
+  );
+});
+
+export const cancelReturnRequest = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const customerId = req.user._id;
+
+  const order = await Order.findById(id);
+
+  if (!order) {
+    throw new ApiError(404, "Order not found");
+  }
+
+  if (order.customerId.toString() !== customerId.toString()) {
+    throw new ApiError(403, "Access denied");
+  }
+
+  if (!order.returnRequest) {
+    throw new ApiError(400, "No return request found for this order");
+  }
+
+  if (order.returnRequest.requestStatus !== "pending") {
+    throw new ApiError(400, "Only pending return requests can be cancelled");
+  }
+
+  order.returnRequest = null;
+  order.status = "delivered";
+  await order.save();
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, "Return request cancelled successfully", order));
 });

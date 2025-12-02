@@ -11,6 +11,13 @@ import {
   getOrderSummary,
   getAllCustomerOrdersSummary,
   getOrdersByCustomerId,
+  submitReturnRequest,
+  approveReturnRequest,
+  rejectReturnRequest,
+  completeReturnRequest,
+  getAllReturnRequests,
+  getMyReturnRequests,
+  cancelReturnRequest,
 } from "../controllers/orderController.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import { authorize } from "../middlewares/authorize.js";
@@ -19,45 +26,10 @@ import {
   customerOrderSchema,
   orderSchema,
 } from "../utils/validationSchemas.js";
+import { upload } from "../middlewares/multer.js";
 
 const router = express.Router();
 
-/**
- * @swagger
- * /api/orders/createOrder:
- *   post:
- *     tags:
- *       - Orders
- *     summary: Create a new order (admin/userpannel)
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/Order'
- *     responses:
- *       201:
- *         description: Order created
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
- *
- * /api/orders/getAllOrders:
- *   get:
- *     tags:
- *       - Orders
- *     summary: Get all orders (admin/userpannel)
- *     responses:
- *       200:
- *         description: List of orders
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
- */
-
-// create order
 router.post(
   "/createOrder",
   authenticate,
@@ -65,7 +37,7 @@ router.post(
   validate(orderSchema),
   createOrder
 );
-// create order by customer
+
 router.post(
   "/createOrderByCustomer",
   authenticate,
@@ -73,49 +45,102 @@ router.post(
   validate(customerOrderSchema),
   createOrderByCustomer
 );
-// get all orders
+
 router.get(
   "/getAllOrders",
   authenticate,
   authorize("admin", "userpannel"),
   getAllOrders
 );
-// get order summary
+
 router.get(
   "/summary",
   authenticate,
   authorize("admin", "userpannel"),
   getOrderSummary
 );
-// get order (customer)
+
 router.get(
   "/customer",
   authenticate,
   authorize("customer"),
   getAllCustomerOrdersSummary
 );
-// get order by customer id
+
 router.get(
   "/getOrdersByCustomerId/:id",
   authenticate,
   authorize("admin", "userpannel"),
   getOrdersByCustomerId
 );
+
+router.get(
+  "/return-requests",
+  authenticate,
+  authorize("admin", "userpannel"),
+  getAllReturnRequests
+);
+
+router.get(
+  "/my-return-requests",
+  authenticate,
+  authorize("customer"),
+  getMyReturnRequests
+);
+
+router.post(
+  "/:id/return-request",
+  authenticate,
+  authorize("customer"),
+  upload.array("images", 5),
+  submitReturnRequest
+);
+router.post(
+  "/:id/return-request/approve",
+  authenticate,
+  authorize("admin", "userpannel"),
+  approveReturnRequest
+);
+
+router.post(
+  "/:id/return-request/reject",
+  authenticate,
+  authorize("admin", "userpannel"),
+  rejectReturnRequest
+);
+
+router.post(
+  "/:id/return-request/complete",
+  authenticate,
+  authorize("admin", "userpannel"),
+  completeReturnRequest
+);
+
+router.post(
+  "/:id/return-request/cancel",
+  authenticate,
+  authorize("customer"),
+  cancelReturnRequest
+);
+
 router.get("/getOrders/:id", authenticate, getOrderById);
+
 router.get("/:id/invoice", authenticate, generateInvoice);
+
 router.patch(
   "/updateOrdersById/:id",
   authenticate,
   authorize("admin", "userpannel"),
   updateOrder
 );
+
 router.patch(
   "/updateOrdersStatus/:id/status",
   authenticate,
   authorize("admin", "userpannel"),
   changeOrderStatus
 );
-// delete order
+
 router.delete("/:id", authenticate, authorize("admin"), deleteOrder);
 
 export default router;

@@ -103,7 +103,7 @@ export const productSchema = Joi.object({
   isActive: Joi.boolean(),
   bestSeller: Joi.boolean(),
   hideProduct: Joi.boolean(),
-});
+}).unknown(true);
 
 export const supportSchema = Joi.object({
   title: Joi.string().required().trim(),
