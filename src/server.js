@@ -24,7 +24,13 @@ const app = express();
 
 connectDatabase();
 
-app.use(helmet());
+// Helmet
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }, 
+    crossOriginEmbedderPolicy: false,
+  })
+);
 
 // CORS Allowed Origins
 const allowedOrigins = [
@@ -102,8 +108,18 @@ app.get("/", (req, res) => {
   });
 });
 
-// STATIC UPLOADS FOLDER for Multer
-app.use("/uploads", express.static(path.resolve("uploads"))); // <-- Multer static serving
+//STATIC UPLOADS FOLDER
+app.use(
+  "/uploads",
+  (req, res, next) => {
+    //CORS headers for images
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cache-Control", "public, max-age=31536000");
+    next();
+  },
+  express.static(path.resolve("uploads"))
+);
 
 // API ROUTES
 app.use("/api/auth", authRoutes);

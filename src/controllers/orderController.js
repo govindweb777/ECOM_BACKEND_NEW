@@ -434,7 +434,7 @@ export const submitReturnRequest = asyncHandler(async (req, res) => {
   }
 
   const imageUrls = req.files
-    ? req.files.map((file) => `/uploads/${file.filename}`)
+    ? req.files.map((file) => `uploads/${file.filename}`)
     : [];
 
   order.returnRequest = {
