@@ -36,10 +36,11 @@ export const getAllSupportTickets = asyncHandler(async (req, res) => {
   if (status) {
     filter.status = status;
   }
+  const tickets = await Support.find(filter).sort({ createdAt: -1 });
 
-  const tickets = await Support.find(filter).populate('customerId', 'firstName lastName email').sort({ createdAt: -1 });
-
-  res.json(new ApiResponse(200, 'Support tickets retrieved successfully', tickets));
+  res.json(
+    new ApiResponse(200, "Support tickets retrieved successfully", tickets)
+  );
 });
 
 export const getSupportTicketById = asyncHandler(async (req, res) => {
